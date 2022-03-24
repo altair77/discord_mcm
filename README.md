@@ -1,4 +1,4 @@
-# Discord bot for Minecraft Srever Management
+# Discord bot for Minecraft server Management
 
 `discord_mcm`は、Minecraftサーバーの起動や終了、コマンド送信が可能なDiscord Botです。  
 Java版、Bedrock版関わらず利用できます。
