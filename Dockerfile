@@ -1,6 +1,4 @@
-FROM golang:1.17.8-alpine
-
-RUN apk add --no-cache openjdk17-jre
+FROM golang:1.17.8-buster
 
 WORKDIR /go/src/app
 
