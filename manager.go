@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	shellwords "github.com/mattn/go-shellwords"
+	"github.com/mattn/go-shellwords"
 )
 
 type Manager struct {
@@ -46,7 +46,7 @@ func (m *Manager) Start() error {
 }
 
 func (m *Manager) Close() {
-	m.session.Close()
+	_ = m.session.Close()
 }
 
 func (m *Manager) createMessageHandler(s *discordgo.Session, mc *discordgo.MessageCreate) {
@@ -59,97 +59,105 @@ func (m *Manager) createMessageHandler(s *discordgo.Session, mc *discordgo.Messa
 	log.Print(mc.Content)
 	switch c := mc.Content; {
 	case strings.HasPrefix(c, m.config.Prefix+"start"):
-		m.launchServer(s, mc)
+		m.launchServer(s)
 	case strings.HasPrefix(c, m.config.Prefix+"stop"):
-		m.stopServer(s, mc)
+		m.stopServer(s)
 	case strings.HasPrefix(c, m.config.Prefix+"cmd"):
 		m.execServer(s, mc)
 	case strings.HasPrefix(c, m.config.Prefix+"log"):
-		m.showLog(s, mc)
+		m.showLog()
 	}
 }
 
-func (m *Manager) launchServer(s *discordgo.Session, mc *discordgo.MessageCreate) {
+func (m *Manager) launchServer(s *discordgo.Session) {
 	launchCommands, err := shellwords.Parse(m.config.LaunchCommand)
 	if err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Error: launchCommand is worng!")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Error: launchCommand is wrong!")
 		return
 	}
 	if m.command != nil && m.command.Process.Pid > 0 {
 		m.command = nil
-		s.ChannelMessageSend(m.config.ChannelID, "Server is running.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Server is running.")
 		return
 	}
 	m.command = exec.Command(launchCommands[0], launchCommands[1:]...)
 	m.stdin, err = m.command.StdinPipe()
 	if err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Failed to get stdin pipe.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to get stdin pipe.")
 		return
 	}
 	m.stdout, err = m.command.StdoutPipe()
 	if err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Failed to get stdout pipe.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to get stdout pipe.")
 		return
 	}
 	m.readLog()
 	if err := m.command.Start(); err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Failed to start server.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to start server.")
 		return
 	}
-	s.ChannelMessageSend(m.config.ChannelID, "Started server!")
+	_, _ = s.ChannelMessageSend(m.config.ChannelID, "Started server!")
 }
 
-func (m *Manager) stopServer(s *discordgo.Session, mc *discordgo.MessageCreate) {
+func (m *Manager) stopServer(s *discordgo.Session) {
 	if m.command == nil || m.command.Process.Pid <= 0 {
-		s.ChannelMessageSend(m.config.ChannelID, "Server is stopped.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Server is stopped.")
 		return
 	}
 	writer := bufio.NewWriter(m.stdin)
 	if _, err := writer.WriteString("stop\n"); err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Failed to send command.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to send command.")
 		return
 	}
-	writer.Flush()
+	err := writer.Flush()
+	if err != nil {
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to send command.")
+		return
+	}
 	if err := m.command.Wait(); err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Failed to stop server.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to stop server.")
 		return
 	}
-	s.ChannelMessageSend(m.config.ChannelID, "Success to stop server.")
+	_, _ = s.ChannelMessageSend(m.config.ChannelID, "Success to stop server.")
 }
 
 func (m *Manager) execServer(s *discordgo.Session, mc *discordgo.MessageCreate) {
 	if m.command == nil || m.command.Process.Pid <= 0 {
-		s.ChannelMessageSend(m.config.ChannelID, "Server is stopped.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Server is stopped.")
 		return
 	}
 
 	ctx := context.Background()
 	if _, err := m.readTimeout(ctx, 1); err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Failed to read pre log.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to read pre log.")
 		return
 	}
 
 	writer := bufio.NewWriter(m.stdin)
 	subCmd := mc.Content[len(m.config.Prefix)+4:]
 	if _, err := writer.WriteString(subCmd + "\n"); err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Failed to send command.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to send command.")
 		return
 	}
-	writer.Flush()
-
-	log, err := m.readTimeout(ctx, 1)
+	err := writer.Flush()
 	if err != nil {
-		s.ChannelMessageSend(m.config.ChannelID, "Fialed to read result log.")
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to send command.")
 		return
 	}
-	logLen := len(log)
+
+	res, err := m.readTimeout(ctx, 1)
+	if err != nil {
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to read result log.")
+		return
+	}
+	logLen := len(res)
 	if logLen >= 1800 {
 		logLen = 1800
 	}
-	s.ChannelMessageSend(m.config.ChannelID, "Sent Command.\n```\n"+log[:logLen]+"\n```")
+	_, _ = s.ChannelMessageSend(m.config.ChannelID, "Sent Command.\n```\n"+res[:logLen]+"\n```")
 }
 
-func (m *Manager) showLog(s *discordgo.Session, mc *discordgo.MessageCreate) {
+func (m *Manager) showLog() {
 
 }
 
