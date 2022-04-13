@@ -122,6 +122,11 @@ func (m *Manager) stopServer(s *discordgo.Session) {
 }
 
 func (m *Manager) execServer(s *discordgo.Session, mc *discordgo.MessageCreate) {
+	if len(mc.Content) < len(m.config.Prefix)+4 || len(strings.TrimSpace(mc.Content[len(m.config.Prefix)+4:])) == 0 {
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Usage: "+m.config.Prefix+"cmd <server command>")
+		return
+	}
+
 	if m.command == nil || m.command.Process.Pid <= 0 {
 		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Server is stopped.")
 		return
