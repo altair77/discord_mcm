@@ -14,12 +14,13 @@ import (
 )
 
 type Manager struct {
-	session *discordgo.Session
-	config  *Config
-	log     chan string
-	command *exec.Cmd
-	stdin   io.WriteCloser
-	stdout  io.ReadCloser
+	session   *discordgo.Session
+	config    *Config
+	log       chan string
+	enableLog bool
+	command   *exec.Cmd
+	stdin     io.WriteCloser
+	stdout    io.ReadCloser
 }
 
 func NewManager(c *Config) *Manager {
@@ -132,12 +133,6 @@ func (m *Manager) execServer(s *discordgo.Session, mc *discordgo.MessageCreate) 
 		return
 	}
 
-	ctx := context.Background()
-	if _, err := m.readTimeout(ctx, 1); err != nil {
-		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to read pre log.")
-		return
-	}
-
 	writer := bufio.NewWriter(m.stdin)
 	subCmd := mc.Content[len(m.config.Prefix)+4:]
 	if _, err := writer.WriteString(subCmd + "\n"); err != nil {
@@ -150,6 +145,7 @@ func (m *Manager) execServer(s *discordgo.Session, mc *discordgo.MessageCreate) 
 		return
 	}
 
+	ctx := context.Background()
 	res, err := m.readTimeout(ctx, 1)
 	if err != nil {
 		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to read result log.")
@@ -174,7 +170,7 @@ func (m *Manager) readLog() {
 		var n int
 		for err == nil {
 			n, err = m.stdout.Read(buff)
-			if n > 0 {
+			if n > 0 && m.enableLog {
 				m.log <- string(buff[:n])
 			}
 		}
@@ -186,6 +182,8 @@ func (m *Manager) readTimeout(ctx context.Context, t int) (string, error) {
 	str := ""
 	done := make(chan struct{})
 	defer close(done)
+	m.enableLog = true
+	defer func() { m.enableLog = false }()
 
 	go func() {
 		prevLen := 0
