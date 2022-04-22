@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os/exec"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/mattn/go-shellwords"
+	"github.com/shirou/gopsutil/v3/load"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 type Manager struct {
@@ -65,8 +68,8 @@ func (m *Manager) createMessageHandler(s *discordgo.Session, mc *discordgo.Messa
 		m.stopServer(s)
 	case strings.HasPrefix(c, m.config.Prefix+"cmd"):
 		m.execServer(s, mc)
-	case strings.HasPrefix(c, m.config.Prefix+"log"):
-		m.showLog()
+	case strings.HasPrefix(c, m.config.Prefix+"status"):
+		m.showStatus(s)
 	}
 }
 
@@ -158,8 +161,31 @@ func (m *Manager) execServer(s *discordgo.Session, mc *discordgo.MessageCreate) 
 	_, _ = s.ChannelMessageSend(m.config.ChannelID, "Sent Command.\n```\n"+res[:logLen]+"\n```")
 }
 
-func (m *Manager) showLog() {
+func (m *Manager) showStatus(s *discordgo.Session) {
+	isRunning := "Stopped"
+	if m.command == nil || m.command.Process.Pid <= 0 {
+		isRunning = "Running"
+	}
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to get memory information.")
+	}
+	a, err := load.Avg()
+	if err != err {
+		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to get load information.")
+	}
 
+	message := fmt.Sprintf(
+		"Server: %s\nLoad: 1min %.3f 5min %.3f 15min %.3f\nMemory(GB): total %2.3f used %2.3f per %2.1f",
+		isRunning,
+		a.Load1,
+		a.Load5,
+		a.Load15,
+		float64(v.Total)/1000000000,
+		float64(v.Used)/1000000000,
+		v.UsedPercent,
+	)
+	_, _ = s.ChannelMessageSend(m.config.ChannelID, message)
 }
 
 func (m *Manager) readLog() {
