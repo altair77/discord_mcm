@@ -12,6 +12,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/mattn/go-shellwords"
+	"github.com/robfig/cron/v3"
 	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
 )
@@ -24,6 +25,7 @@ type Manager struct {
 	command   *exec.Cmd
 	stdin     io.WriteCloser
 	stdout    io.ReadCloser
+	cron      *cron.Cron
 }
 
 func NewManager(c *Config) *Manager {
@@ -46,10 +48,13 @@ func (m *Manager) Start() error {
 	if err := session.Open(); err != nil {
 		return err
 	}
+
+	m.startCron()
 	return nil
 }
 
 func (m *Manager) Close() {
+	m.stopCron()
 	_ = m.session.Close()
 }
 
@@ -122,6 +127,7 @@ func (m *Manager) stopServer(s *discordgo.Session) {
 		_, _ = s.ChannelMessageSend(m.config.ChannelID, "Failed to stop server.")
 		return
 	}
+	m.command = nil
 	_, _ = s.ChannelMessageSend(m.config.ChannelID, "Success to stop server.")
 }
 
@@ -162,9 +168,9 @@ func (m *Manager) execServer(s *discordgo.Session, mc *discordgo.MessageCreate) 
 }
 
 func (m *Manager) showStatus(s *discordgo.Session) {
-	isRunning := "Stopped"
+	isRunning := "Running"
 	if m.command == nil || m.command.Process.Pid <= 0 {
-		isRunning = "Running"
+		isRunning = "Stopped"
 	}
 	v, err := mem.VirtualMemory()
 	if err != nil {
@@ -237,6 +243,56 @@ func (m *Manager) readTimeout(ctx context.Context, t int) (string, error) {
 			return str, nil
 		case <-ctx.Done():
 			return str, ctx.Err()
+		}
+	}
+}
+
+func (m *Manager) startCron() {
+	m.cron = cron.New()
+	for _, schedule := range m.config.Schedules {
+		if _, err := m.cron.AddFunc(schedule.Datetime, m.cronFunction(schedule.Type, schedule.Command)); err != nil {
+			_, _ = m.session.ChannelMessageSend(m.config.ChannelID, "Failed to set schedule.")
+		}
+	}
+	m.cron.Start()
+}
+
+func (m *Manager) stopCron() {
+	m.cron.Stop()
+}
+
+func (m *Manager) cronFunction(t string, c string) func() {
+	return func() {
+		log.Printf("%s %s", t, c)
+		if t == "mc" {
+			if m.command == nil || m.command.Process.Pid <= 0 {
+				return
+			}
+			writer := bufio.NewWriter(m.stdin)
+			subCmd := c
+			if _, err := writer.WriteString(subCmd + "\n"); err != nil {
+				return
+			}
+			err := writer.Flush()
+			if err != nil {
+				return
+			}
+			ctx := context.Background()
+			if _, err := m.readTimeout(ctx, 1); err != nil {
+				return
+			}
+		}
+		if t == "host" {
+			cmd, err := shellwords.Parse(c)
+			if err != nil {
+				_, _ = m.session.ChannelMessageSend(m.config.ChannelID, "Error: Schedule command is wrong!")
+				return
+			}
+			if _, err := exec.Command(cmd[0], cmd[1:]...).CombinedOutput(); err != nil {
+				log.Print(err)
+				_, _ = m.session.ChannelMessageSend(m.config.ChannelID, "Failed to exec schedule.")
+				return
+			}
 		}
 	}
 }

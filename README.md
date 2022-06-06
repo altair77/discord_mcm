@@ -3,6 +3,13 @@
 `discord_mcm`は、Minecraftサーバーの起動や終了、コマンド送信が可能なDiscord Botです。  
 Java版、Bedrock版関わらず利用できます。
 
+## 機能
+
+- サーバー起動/終了
+- サーバーコマンド送信
+- サーバーステータス確認
+- 定期実行
+
 ## 使い方
 
 初回起動時には、設定ファイル`dmcm_config.yml`が生成されます。  
@@ -22,6 +29,13 @@ token: your token                              # Discord Botのトークン
 channelId: your channel ID                     # やり取りするDiscordチャンネルID
 launchCommand: java -jar minecraft_server.jar  # サーバー起動コマンド
 prefix: m!                                     # コマンドプレフィックス
+schedules:                                     # 定期実行の設定 ない場合は[]を指定
+  - type: mc                                   # minecraftへ送信: mc、ホストへ送信: host
+    command: stop                              # コマンド内容
+    datetime: 0 12 * * *                       # 「分 時 日 月 曜」または「@every (時間)」
+  - type: host
+    command: java -jar minecraft_server.jar
+    datetime: 5 12 * * *
 ```
 
 ## Botコマンド
@@ -49,11 +63,3 @@ m!cmd [command]
 ```
 m!status
 ```
-
-## 主な機能、未実装機能
-
-- [x] サーバー起動
-- [x] サーバー終了
-- [x] サーバーコマンド送信
-- [x] サーバーステータス確認
-- [ ] 定期実行

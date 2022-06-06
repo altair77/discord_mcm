@@ -11,10 +11,17 @@ const (
 )
 
 type Config struct {
-	Token         string `yaml:"token"`
-	ChannelID     string `yaml:"channelId"`
-	LaunchCommand string `yaml:"launchCommand"`
-	Prefix        string `yaml:"prefix"`
+	Token         string     `yaml:"token"`
+	ChannelID     string     `yaml:"channelId"`
+	LaunchCommand string     `yaml:"launchCommand"`
+	Prefix        string     `yaml:"prefix"`
+	Schedules     []Schedule `yaml:"schedules"`
+}
+
+type Schedule struct {
+	Type     string `yaml:"type"`
+	Command  string `yaml:"command"`
+	Datetime string `yaml:"datetime"`
 }
 
 func ExistsConfig() bool {
@@ -28,6 +35,7 @@ func NewConfig() *Config {
 		ChannelID:     "your channel ID",
 		LaunchCommand: "java -jar minecraft_server.jar",
 		Prefix:        "m!",
+		Schedules:     []Schedule{},
 	}
 }
 

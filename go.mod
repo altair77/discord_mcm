@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/bwmarrin/discordgo v0.24.0
 	github.com/mattn/go-shellwords v1.0.12
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/shirou/gopsutil/v3 v3.22.3
 	gopkg.in/yaml.v2 v2.4.0
 )
